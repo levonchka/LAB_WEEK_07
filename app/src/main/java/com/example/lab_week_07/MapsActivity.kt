@@ -4,6 +4,7 @@ import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -18,19 +19,18 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 
-
-
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mMap: GoogleMap
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+
+    private val fusedLocationProviderClient by lazy {
+        LocationServices.getFusedLocationProviderClient(this)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_maps)
-
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.map) as SupportMapFragment
@@ -71,16 +71,33 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private fun getLastLocation() {
         if (hasLocationPermission()) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { loc: Location? ->
-                loc?.let {
-                    val userLocation = LatLng(it.latitude, it.longitude)
-                    mMap.addMarker(MarkerOptions().position(userLocation).title("You are here"))
-                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(userLocation, 15f))
-                    mMap.isMyLocationEnabled = true
-                    mMap.uiSettings.isMyLocationButtonEnabled = true
-                }
+            try {
+                fusedLocationProviderClient.lastLocation
+                    .addOnSuccessListener { location: Location? ->
+                        location?.let {
+                            val userLocation = LatLng(it.latitude, it.longitude)
+                            updateMapLocation(userLocation)
+                            addMarkerAtLocation(userLocation, "You")
+                        }
+                    }
+            } catch (e: SecurityException) {
+                Log.e("MapsActivity", "SecurityException: ${e.message}")
             }
+        } else {
+            requestPermissionLauncher.launch(ACCESS_FINE_LOCATION)
         }
+    }
+
+    private fun updateMapLocation(location: LatLng) {
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(location, 7f))
+    }
+
+    private fun addMarkerAtLocation(location: LatLng, title: String) {
+        mMap.addMarker(
+            MarkerOptions()
+                .title(title)
+                .position(location)
+        )
     }
 
     override fun onMapReady(googleMap: GoogleMap) {
